@@ -71,7 +71,8 @@ const productSchema = new mongoose.Schema({
   },
   barcode: {
     type: String,
-    unique: true
+    // unique: true,
+    sparse: true
   },
   inZoho: Boolean,
   thumbnail_url: String,
@@ -109,8 +110,19 @@ const productSchema = new mongoose.Schema({
     userName: String,
     detail: String,
     rating: Number,
-  }]
+  }],
+  zoho: {
+    type: Boolean,
+    default: false
+  },
+  zohoProductId: String,
+  zohoLastSyncedAt: {
+    type: Date,
+    default: null
+  }
 });
+
+productSchema.index({ barcode: 1 }, { unique: true, sparse: true });
 
 const Product = mongoose.model('Product', productSchema);
 

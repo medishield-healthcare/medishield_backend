@@ -18,6 +18,7 @@ const {
   updateBannerProduct,
   createNewBanner,
   deleteBannerProduct,
+  syncZohoProducts
 } = require("../controller/productCtrl");
 const { isAdmin, authMiddleware } = require("../middlewares/authMiddleware");
 const router = express.Router();
@@ -41,5 +42,6 @@ router.get("/get/getallproducts", authMiddleware, isAdmin, getAllProductsAdmin);
 router.get("/getproduct/:sku", authMiddleware, isAdmin, getaProductwithSku);
 router.get("/getproductwithid/:id", getProductById);
 router.get("/context/contextualSearch", contextualSearch);
+router.post("/sync/zoho", authMiddleware, isAdmin, syncZohoProducts);
 
 module.exports = router;

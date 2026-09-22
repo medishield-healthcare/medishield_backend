@@ -54,6 +54,10 @@ router.get("/verify-email/:token", isEmailVerified);
 router.get("/sendVerificationEmail/:id", sendVerificationEmail);
 router.get("/verifyEmail/:token", verifyEmail);
 router.get("/loginWithGoogle/:uid", loginWithGoogle);
+router.get('/me', authMiddleware, async (req, res) => {
+  res.json({ user: req.user });
+})
+
 
 router.post("/cart", authMiddleware, userCart);
 router.post("/cart/remove", authMiddleware, removeCartItem);
@@ -105,5 +109,5 @@ router.post("/create-razorpay-order", authMiddleware, createRazorpayOrder);
 
 
 
-
 module.exports = router;
+

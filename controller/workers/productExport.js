@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 
 
 const exportAllProducts = async () => {
-
     try {
         // connect to db
         mongoose.connect(workerData, {

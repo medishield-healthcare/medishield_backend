@@ -6,6 +6,10 @@ const app = express();
 const dotenv = require("dotenv").config();
 const PORT = 5000;
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+
 
 const authRouter = require("./routes/authRoute");
 const productRouter = require("./routes/productRoute");
@@ -19,6 +23,8 @@ const enqRouter = require("./routes/enqRoute");
 const roleRouter = require("./routes/permissionRoute");
 const uploadRouter = require("./routes/uploadRoute");
 const couponRouter = require("./routes/couponRoute");
+const { activityLogger } = require("./middlewares/activityLogger");
+const activityLogRouter = require("./routes/activityLogRoute");
 const cookieParser = require("cookie-parser");
 const morgan = require("morgan");
 const cors = require("cors");
@@ -34,6 +40,9 @@ app.use(bodyParser.json({
 }));
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
+app.use("/api", activityLogger);
+app.use("/api/activity-logs", activityLogRouter);
+
 app.use("/api/user", authRouter);
 app.use("/api/product", productRouter);
 app.use("/api/category", categoryRouter);
@@ -42,7 +51,7 @@ app.use("/api/enquiry", enqRouter);
 app.use("/api/upload", uploadRouter);
 app.use("/api/cart", cartRouter);
 app.use("/api/roles", roleRouter);
-app.use("/api/coupon", couponRouter)
+app.use("/api/coupon", couponRouter);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ message: "Everything is healthy" });

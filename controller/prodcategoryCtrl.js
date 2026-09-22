@@ -83,14 +83,21 @@ const getCategory = asyncHandler(async (req, res) => {
 
 const getallCategory = asyncHandler(async (req, res) => {
   try {
-    const getallCategory = await Category.find().
-      sort({
-        name: 1
-      })
-      ;
+    const excludedCategories = [
+      "Clinical Problem Solvers",
+      "Hand sanitizers",
+      "Medication",
+      "Refurbished",
+    ];
+
+    const getallCategory = await Category.find({
+      name: { $nin: excludedCategories },
+    }).sort({
+      name: 1,
+    });
+
     res.json({
-      "categories":
-        getallCategory
+      categories: getallCategory,
     });
   } catch (error) {
     throw new Error(error);

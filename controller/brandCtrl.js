@@ -12,7 +12,6 @@ const createBrand = asyncHandler(async (req, res) => {
 
     res.json(newBrand);
   } catch (error) {
-
     throw new Error(error);
   }
 });
