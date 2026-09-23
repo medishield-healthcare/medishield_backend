@@ -173,11 +173,11 @@ const getAllBannerProducts = asyncHandler(async (req, res) => {
 });
 
 const updateBannerProduct = asyncHandler(async (req, res) => {
-  const { _id, title, mobile_image, id } = req.body;
+  const { _id, title, mobile_image, id, mobile } = req.body;
   validateMongoDbId(_id);
   const updatedBanner = await Banner.findByIdAndUpdate(
     _id,
-    { title, mobile_image, id },
+    { title, mobile_image, id, mobile },
     { new: true, runValidators: true }
   );
   if (!updatedBanner) {

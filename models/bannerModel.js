@@ -4,6 +4,7 @@ const bannerSchema = new mongoose.Schema({
     mobile_image: String,
     title: String,
     id: String,
+    mobile: Boolean,
     createdAt: {
         type: Date,
         default: Date.now
