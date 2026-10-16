@@ -137,7 +137,7 @@ function createEventHandlers({ Event: Model, createId = randomUUID }) {
     }),
 
     getallEvent: wrap(async (req, res) => {
-      const events = await Model.find().sort({ createdAt: -1 });
+      const events = await Model.find().sort({ fullDate: -1 });
       return res.json({ data: events.map(publicEvent) });
     }),
   };
