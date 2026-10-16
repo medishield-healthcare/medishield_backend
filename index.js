@@ -27,6 +27,7 @@ const roleRouter = require("./routes/permissionRoute");
 const uploadRouter = require("./routes/uploadRoute");
 const couponRouter = require("./routes/couponRoute");
 const videoRouter = require("./routes/videoRoute");
+const eventRouter = require("./routes/eventRoute");
 const { activityLogger } = require("./middlewares/activityLogger");
 const activityLogRouter = require("./routes/activityLogRoute");
 const cookieParser = require("cookie-parser");
@@ -57,6 +58,7 @@ app.use("/api/cart", cartRouter);
 app.use("/api/roles", roleRouter);
 app.use("/api/coupon", couponRouter);
 app.use("/api/video", videoRouter);
+app.use("/api/event", eventRouter);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ message: "Everything is healthy" });
