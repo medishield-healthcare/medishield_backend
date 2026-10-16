@@ -41,10 +41,11 @@ const {
   getAllAdmins,
   updateAdmin,
   getUserPermissions,
+  googleOAuthLogin,
 } = require("../controller/userCtrl");
 const { authMiddleware, isAdmin } = require("../middlewares/authMiddleware");
 const router = express.Router();
-
+router.post("/google-login", googleOAuthLogin);
 router.post("/login", loginUserCtrl);
 router.post("/register", createUser);
 router.post("/admin-login", loginAdmin);

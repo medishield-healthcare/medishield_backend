@@ -1,3 +1,4 @@
+require("dotenv").config();
 const User = require("../models/userModel");
 const Product = require("../models/productModel");
 const Cart = require("../models/cartModel");
@@ -13,7 +14,6 @@ const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { sendResendEmail } = require("../utils/sendResendEmail");
 const { Worker } = require("worker_threads");
-require("dotenv").config();
 const fs = require("fs");
 const bcrypt = require("bcrypt");
 const { getZohoAccessToken, zohoBookApi } = require("../utils/zohoapi");
@@ -23,6 +23,10 @@ const {
   addMedishieldCoins,
   getAvailableMedishieldCoins,
 } = require("../utils/medishieldCoins");
+const { OAuth2Client } = require("google-auth-library");
+const appleSignin = require("apple-signin-auth");
+
+const googleClient = new OAuth2Client();
 
 const BASE_URL = process.env.BASE_URL;
 const axios = require("axios");
@@ -583,6 +587,149 @@ const updatedUser = asyncHandler(async (req, res) => {
   }
 });
 
+
+const googleOAuthLogin = asyncHandler(async (req, res) => {
+  const { idToken, referralCode } = req.body;
+
+  if (!idToken) {
+    return res.status(400).json({
+      message: "Google ID token is required",
+    });
+  }
+
+  console.log(process.env.GOOGLE_CLIENT_ID)
+
+  const clientIds = (process.env.GOOGLE_CLIENT_ID || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  if (!clientIds.length) {
+    return res.status(500).json({
+      message: "Google Client ID is not configured",
+    });
+  }
+
+  let payload;
+
+  // 1. Verify Google ID token
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: clientIds,
+    });
+
+    payload = ticket.getPayload();
+  } catch (error) {
+    return res.status(401).json({
+      message: "Invalid Google ID token",
+    });
+  }
+
+  if (
+    !payload?.sub ||
+    !payload?.email ||
+    payload.email_verified !== true
+  ) {
+    return res.status(401).json({
+      message: "Google account email is not verified",
+    });
+  }
+
+  const email = payload.email.toLowerCase();
+
+  // 2. Find existing user by Google ID or email
+  let user = await User.findOne({
+    $or: [
+      { googleId: payload.sub },
+      { email },
+    ],
+  });
+
+  if (user) {
+    // Do not overwrite a different linked Google identity
+    if (user.googleId && user.googleId !== payload.sub) {
+      return res.status(409).json({
+        message: "A different Google account is linked to this user",
+      });
+    }
+
+    // Link verified Google identity to an existing account
+    user.googleId = payload.sub;
+    user.isEmailVerified = true;
+
+    await user.save();
+  } else {
+    // 3. Create Zoho customer, following existing registration logic
+    const accessToken = await zohoAuth();
+
+    const customerPayload = {
+      contact_name: email,
+      contact_type: "customer",
+      contact_subtype: "individual",
+      contact_persons: [
+        {
+          first_name: payload.given_name || payload.name || email,
+          last_name: payload.family_name || "",
+          email,
+        },
+      ],
+    };
+
+    const customer = await zohoBookApi.post(
+      `/contacts?organization_id=${org}`,
+      customerPayload,
+      {
+        headers: {
+          authorization: `Zoho-oauthtoken ${accessToken}`,
+        },
+        timeout: 30000,
+      }
+    );
+
+    user = await User.create({
+      firstname: payload.given_name || payload.name || email,
+      lastname: payload.family_name || "",
+      email,
+      googleId: payload.sub,
+      isEmailVerified: true,
+      zohoCustomerId: customer.data.contact.contact_id,
+    });
+
+    // 4. Generate referral code, following existing registration logic
+    user.referralCode = user._id.toString().slice(0, 9);
+    await user.save();
+
+    // 5. Apply referral reward if a valid referral code was supplied
+    if (referralCode) {
+      const referrer = await User.findOne({ referralCode });
+
+      if (referrer) {
+        referrer.medishieldcoins =
+          (referrer.medishieldcoins || 0) + 100;
+
+        await referrer.save();
+      }
+    }
+  }
+
+  // 6. Issue MediShield app tokens
+  const refreshToken = generateRefreshToken(user._id);
+
+  user.refreshToken = refreshToken;
+  await user.save();
+
+  return res.json({
+    _id: user._id,
+    firstname: user.firstname,
+    lastname: user.lastname,
+    email: user.email,
+    mobile: user.mobile,
+    isEmailVerified: user.isEmailVerified,
+    token: generateToken(user._id),
+    refreshToken,
+  });
+});
 // save user Address
 const saveAddress = asyncHandler(async (req, res) => {
   const { _id } = req.user;
@@ -2728,4 +2875,5 @@ module.exports = {
   createAdmin,
   deleteAdmin,
   getUserPermissions,
+  googleOAuthLogin,
 };

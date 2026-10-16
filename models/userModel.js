@@ -35,6 +35,14 @@ var userSchema = new mongoose.Schema(
       type: String,
       sparse: true,
     },
+    googleId: {
+      type: String,
+      sparse: true,
+    },
+    appleId: {
+      type: String,
+      sparse: true,
+    },
     address: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "Address",
