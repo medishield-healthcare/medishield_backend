@@ -42,10 +42,12 @@ const {
   updateAdmin,
   getUserPermissions,
   googleOAuthLogin,
+  appleOAuthLogin
 } = require("../controller/userCtrl");
 const { authMiddleware, isAdmin } = require("../middlewares/authMiddleware");
 const router = express.Router();
 router.post("/google-login", googleOAuthLogin);
+router.post("/apple-login", appleOAuthLogin);
 router.post("/login", loginUserCtrl);
 router.post("/register", createUser);
 router.post("/admin-login", loginAdmin);

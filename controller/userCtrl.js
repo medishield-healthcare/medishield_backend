@@ -25,7 +25,6 @@ const {
 } = require("../utils/medishieldCoins");
 const { OAuth2Client } = require("google-auth-library");
 const appleSignin = require("apple-signin-auth");
-
 const googleClient = new OAuth2Client();
 
 const BASE_URL = process.env.BASE_URL;
@@ -451,6 +450,173 @@ const loginWithGoogle = asyncHandler(async (req, res) => {
   } else {
     throw new Error("Google Signin Failed Please use normal login");
   }
+});
+
+
+
+const appleOAuthLogin = asyncHandler(async (req, res) => {
+  const { identityToken, firstName, lastName, referralCode } = req.body;
+
+  if (!identityToken) {
+    return res.status(400).json({
+      message: "Apple identity token is required",
+    });
+  }
+
+  const appleClientId = process.env.APPLE_CLIENT_ID;
+
+  if (!appleClientId) {
+    return res.status(500).json({
+      message: "Apple Client ID is not configured",
+    });
+  }
+
+  let payload;
+
+  // 1. Verify Apple's identity token
+  try {
+    payload = await appleSignin.verifyIdToken(identityToken, {
+      audience: appleClientId,
+      ignoreExpiration: false,
+    });
+  } catch (error) {
+    console.error("Apple token verification failed:", error.message);
+
+    return res.status(401).json({
+      message: "Invalid Apple identity token",
+    });
+  }
+
+  if (!payload?.sub) {
+    return res.status(401).json({
+      message: "Invalid Apple user identity",
+    });
+  }
+
+  const appleId = payload.sub;
+  const email = payload.email?.toLowerCase();
+
+  // 2. Find existing Apple account first
+  let user = await User.findOne({ appleId });
+
+  // If Apple supplies a verified email, we can find a matching account
+  if (!user && email) {
+    const emailVerified =
+      payload.email_verified === true ||
+      payload.email_verified === "true";
+
+    if (emailVerified) {
+      user = await User.findOne({ email });
+    }
+  }
+
+  if (user) {
+    // Don't replace an already-linked Apple identity
+    if (user.appleId && user.appleId !== appleId) {
+      return res.status(409).json({
+        message: "A different Apple account is linked to this user",
+      });
+    }
+
+    user.appleId = appleId;
+
+    if (email && !user.email) {
+      user.email = email;
+    }
+
+    if (email && (
+      payload.email_verified === true ||
+      payload.email_verified === "true"
+    )) {
+      user.isEmailVerified = true;
+    }
+
+    await user.save();
+  } else {
+    // New Apple user needs an email for the current User schema
+    if (!email) {
+      return res.status(400).json({
+        message:
+          "Apple did not provide an email. Please try signing in again.",
+      });
+    }
+
+    const emailVerified =
+      payload.email_verified === true ||
+      payload.email_verified === "true";
+
+    if (!emailVerified) {
+      return res.status(401).json({
+        message: "Apple email is not verified",
+      });
+    }
+
+    // 3. Create Zoho customer, like existing registration
+    const accessToken = await zohoAuth();
+
+    const customerPayload = {
+      contact_name: email,
+      contact_type: "customer",
+      contact_subtype: "individual",
+      contact_persons: [
+        {
+          first_name: firstName || email.split("@")[0],
+          last_name: lastName || "",
+          email,
+        },
+      ],
+    };
+
+    const customer = await zohoBookApi.post(
+      `/contacts?organization_id=${org}`,
+      customerPayload,
+      {
+        headers: {
+          authorization: `Zoho-oauthtoken ${accessToken}`,
+        },
+        timeout: 30000,
+      }
+    );
+
+    user = await User.create({
+      firstname: firstName || email.split("@")[0],
+      lastname: lastName || "",
+      email,
+      appleId,
+      isEmailVerified: true,
+      zohoCustomerId: customer.data.contact.contact_id,
+    });
+
+    user.referralCode = user._id.toString().slice(0, 9);
+    await user.save();
+
+    // Apply referral reward using the existing helper
+    if (referralCode) {
+      const referrer = await User.findOne({ referralCode });
+
+      if (referrer) {
+        addMedishieldCoins(referrer, 100);
+        await referrer.save();
+      }
+    }
+  }
+
+  // 4. Issue MediShield tokens
+  const refreshToken = generateRefreshToken(user._id);
+
+  user.refreshToken = refreshToken;
+  await user.save();
+
+  return res.json({
+    _id: user._id,
+    firstname: user.firstname,
+    lastname: user.lastname,
+    email: user.email,
+    mobile: user.mobile,
+    isEmailVerified: user.isEmailVerified,
+    token: generateToken(user._id),
+    refreshToken,
+  });
 });
 
 const isUserExists = asyncHandler(async (req, res) => {
@@ -2876,4 +3042,5 @@ module.exports = {
   deleteAdmin,
   getUserPermissions,
   googleOAuthLogin,
+  appleOAuthLogin,
 };
