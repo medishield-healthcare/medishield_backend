@@ -2997,6 +2997,87 @@ const getSingleOrder = asyncHandler(async (req, res) => {
   }
 });
 
+
+const updateCartQuantity = asyncHandler(async (req, res) => {
+  const { product } = req.body;
+  const { _id } = req.user;
+
+  validateMongoDbId(_id);
+
+  if (!product?.variant || !Number.isInteger(product.count)) {
+    return res.status(400).json({
+      message: "Product variant and valid quantity are required",
+    });
+  }
+
+  if (product.count < 1) {
+    return res.status(400).json({
+      message: "Quantity must be at least 1",
+    });
+  }
+
+  const user = await User.findById(_id);
+
+  if (!user) {
+    return res.status(404).json({
+      message: "User not found",
+    });
+  }
+
+  const cart = await Cart.findOne({ orderby: user._id });
+
+  if (!cart) {
+    return res.status(404).json({
+      message: "Cart not found",
+    });
+  }
+
+  const cartItem = cart.products.find(
+    (item) => String(item.variant) === String(product.variant),
+  );
+
+  if (!cartItem) {
+    return res.status(404).json({
+      message: "Product not found in cart",
+    });
+  }
+
+  // Check stock for the requested final quantity.
+  const { inStock } = await checkStock(
+    cartItem.variant,
+    product.count,
+    cartItem.product,
+  );
+
+  if (Number(inStock) < product.count) {
+    return res.status(400).json({
+      message:
+        Number(inStock) <= 0
+          ? "This product is currently out of stock"
+          : `Only ${inStock} units are available in stock`,
+      availableStock: Number(inStock),
+    });
+  }
+
+  const oldQuantity = Number(cartItem.count || 0);
+  const unitPrice = Number(cartItem.price || 0);
+
+  cartItem.count = product.count;
+
+  // Recalculate total from all cart items to avoid total mismatches.
+  cart.cartTotal = cart.products.reduce((total, item) => {
+    return total + Number(item.price || 0) * Number(item.count || 0);
+  }, 0);
+
+  await cart.save();
+
+  const updatedCart = await Cart.findById(cart._id).populate(
+    "products.product",
+  );
+
+  return res.json(updatedCart);
+});
+
 module.exports = {
   createUser,
   loginUserCtrl,
@@ -3043,4 +3124,5 @@ module.exports = {
   getUserPermissions,
   googleOAuthLogin,
   appleOAuthLogin,
+  updateCartQuantity,
 };

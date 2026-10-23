@@ -42,7 +42,8 @@ const {
   updateAdmin,
   getUserPermissions,
   googleOAuthLogin,
-  appleOAuthLogin
+  appleOAuthLogin,
+  updateCartQuantity,
 } = require("../controller/userCtrl");
 const { authMiddleware, isAdmin } = require("../middlewares/authMiddleware");
 const router = express.Router();
@@ -66,6 +67,11 @@ router.post("/cart", authMiddleware, userCart);
 router.post("/cart/remove", authMiddleware, removeCartItem);
 router.post("/cart/create-order", authMiddleware, createOrder);
 router.post("/getorderbyuser/:id", authMiddleware, isAdmin, getAllOrders);
+router.patch(
+  "/cart/quantity",
+  authMiddleware,
+  updateCartQuantity
+);
 
 router.post("/forgot-password-token", forgotPasswordToken);
 router.get('/reset-password/:token', resetPasswordForm);
