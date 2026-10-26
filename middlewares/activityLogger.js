@@ -1,6 +1,6 @@
 const ActivityLog = require("../models/activityLogModel");
 
-const resources = ["product", "coupon", "order", "banner", "account", "role", "brand", "category", "cart", "address", "wishlist", "review", "payment", "enquiry", "upload", "event"];
+const resources = ["product", "coupon", "order", "banner", "account", "role", "brand", "category", "cart", "address", "wishlist", "review", "payment", "enquiry", "upload", "event", "blog"];
 const actionLabels = {
   create: "Created", update: "Updated", delete: "Deleted", publish: "Published",
   unpublish: "Unpublished", feature: "Featured", unfeature: "Unfeatured",
@@ -8,7 +8,7 @@ const actionLabels = {
   login: "Signed in to", logout: "Signed out of", password_reset: "Requested password reset for", password_change: "Changed password for",
   verify: "Verified", send_verification: "Sent verification for", export: "Exported",
 };
-const modules = { product: "product", coupon: "coupon", user: "account", roles: "role", brand: "brand", category: "category", cart: "cart", enquiry: "enquiry", upload: "upload", event: "event" };
+const modules = { product: "product", coupon: "coupon", user: "account", roles: "role", brand: "brand", category: "category", cart: "cart", enquiry: "enquiry", upload: "upload", event: "event", blog: "blog" };
 const sensitiveField = /password|token|secret|authorization|cookie|otp|card|cvv|paymentintent|razorpay|email|mobile|phone|address/i;
 const text = (value, max = 160) => (typeof value === "string" || typeof value === "number") ? String(value).slice(0, max) : "";
 const idText = value => {
@@ -92,7 +92,7 @@ function buildActivityEvent(req, statusCode, response = {}, moduleName) {
   // sendVerificationEmail uses a JWT in its :id parameter, not an item ID.
   const paramId = req.route.path.toLowerCase().includes("sendverification") ? undefined : req.params?.id;
   const targetId = idText(req.activityTarget?.id || paramId || body._id || body.productId || body.prodId || response.id || (resource === "account" ? user?._id : undefined));
-  const labelAllowed = ["product", "coupon", "banner", "role", "brand", "category", "event"].includes(resource);
+  const labelAllowed = ["product", "coupon", "banner", "role", "brand", "category", "event", "blog"].includes(resource);
   return {
     actor, action, resource,
     summary: `${actionLabels[action]} ${resource}`,

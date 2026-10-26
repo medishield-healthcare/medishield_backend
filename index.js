@@ -9,7 +9,7 @@ const { notFound, errorHandler } = require("./middlewares/errorHandler");
 const app = express();
 const PORT = 5000;
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 
@@ -28,6 +28,7 @@ const uploadRouter = require("./routes/uploadRoute");
 const couponRouter = require("./routes/couponRoute");
 const videoRouter = require("./routes/videoRoute");
 const eventRouter = require("./routes/eventRoute");
+const blogRouter = require("./routes/blogRoute");
 const { activityLogger } = require("./middlewares/activityLogger");
 const activityLogRouter = require("./routes/activityLogRoute");
 const cookieParser = require("cookie-parser");
@@ -59,6 +60,7 @@ app.use("/api/roles", roleRouter);
 app.use("/api/coupon", couponRouter);
 app.use("/api/video", videoRouter);
 app.use("/api/event", eventRouter);
+app.use("/api/blog", blogRouter);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ message: "Everything is healthy" });
