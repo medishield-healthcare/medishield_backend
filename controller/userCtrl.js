@@ -1039,85 +1039,106 @@ const updatePassword = asyncHandler(async (req, res) => {
 });
 
 const forgotPasswordToken = asyncHandler(async (req, res) => {
-  const { email } = req.body;
+  const email = req.body.email?.trim().toLowerCase();
+
+  if (!email) {
+    return res.status(400).json({
+      status: "fail",
+      message: "Email is required.",
+    });
+  }
+
   const user = await User.findOne({ email });
-  if (!user) throw new Error("User not found with this email");
-  try {
-    const token = await user.createPasswordResetToken();
-    await user.save();
-    const resetURL = `<!DOCTYPE html>
+
+  if (!user) {
+    return res.status(404).json({
+      status: "fail",
+      message: "User not found with this email.",
+    });
+  }
+
+  const resetToken = crypto.randomBytes(32).toString("hex");
+
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  // Update only password-reset fields.
+  // Avoid validating unrelated fields such as medishieldcoins.
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        passwordResetToken: hashedToken,
+        passwordResetExpires: expiresAt,
+      },
+    },
+    {
+      runValidators: false,
+    },
+  );
+
+  const resetURL = `${process.env.FRONTEND_URL}/auth/reset-password?token=${resetToken}`;
+
+  const html = `
+    <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Password Reset</title>
-      <style>
-        body {
-          font-family: 'Arial', sans-serif;
-          background-color: #f4f4f4;
-          margin: 0;
-          padding: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100vh;
-        }
-    
-        .container {
-          text-align: center;
-          background-color: #fff;
-          padding: 30px;
-          border-radius: 8px;
-          box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-          width: 300px;
-        }
-    
-        h1 {
-          color: #333;
-        }
-    
-        p {
-          color: #555;
-          margin-top: 10px;
-          margin-bottom: 20px;
-        }
-    
-        a.button {
-          display: inline-block;
-          background-color: #3498db;
-          color: #fff;
-          text-decoration: none;
-          padding: 10px 20px;
-          border-radius: 5px;
-          transition: background-color 0.3s ease, color 0.3s ease;
-        }
-    
-        a.button:hover {
-          background-color: #2980b9;
-        }
-    
-       
-      </style>
+      <title>MediShield Password Reset</title>
     </head>
-    <body>
-      <div class="container">
-        <h1>Password Reset</h1>
-        <p>Hi, Please follow this link to reset your password. This link is valid for the next 10 minutes.</p>
-        <a href='${BASE_URL}/api/user/reset-password/${token}' class="button">Click Here</a>
+    <body style="font-family: Arial, sans-serif; background: #f4f4f4; padding: 30px;">
+      <div style="max-width: 500px; margin: auto; background: #fff; padding: 30px; border-radius: 12px; text-align: center;">
+        <h2 style="color: #0f766e;">Reset Your Password</h2>
+        <p>We received a request to reset your MediShield account password.</p>
+        <p>This link expires in 10 minutes.</p>
+        <a
+          href="${resetURL}"
+          style="display: inline-block; background: #0f766e; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px;"
+        >
+          Reset Password
+        </a>
+        <p style="margin-top: 24px; color: #666; font-size: 12px;">
+          If you did not request this change, you can ignore this email.
+        </p>
       </div>
     </body>
     </html>
-    `;
+  `;
 
-    sendResendEmail(
-      (to = user.email),
-      (subject = "Forgot Password Link"),
-      (html = resetURL),
-    );
-    res.json({ token: token });
+  try {
+    await sendResendEmail(user.email, "MediShield - Reset Your Password", html);
   } catch (error) {
-    throw new Error(error);
+    // Invalidate the token if the email could not be sent.
+    await User.updateOne(
+      {
+        _id: user._id,
+        passwordResetToken: hashedToken,
+      },
+      {
+        $unset: {
+          passwordResetToken: 1,
+          passwordResetExpires: 1,
+        },
+      },
+    );
+
+    console.error("Password reset email failed:", error.message);
+
+    return res.status(500).json({
+      status: "fail",
+      message: "Unable to send the password reset email. Please try again.",
+    });
   }
+
+  return res.status(200).json({
+    status: "success",
+    message: "If your account exists, a password reset email has been sent.",
+  });
 });
 
 const resetPasswordForm = asyncHandler(async (req, res) => {
@@ -1207,65 +1228,70 @@ const resetPasswordForm = asyncHandler(async (req, res) => {
 const resetPassword = asyncHandler(async (req, res) => {
   const { password } = req.body;
   const { token } = req.params;
+
+  // 1. Validate password
+  if (!password || password.length < 8) {
+    return res.status(400).json({
+      success: false,
+      message: "Password must be at least 8 characters long.",
+    });
+  }
+
+  // 2. Hash the reset token
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+  // 3. Find user with valid, non-expired reset token
   const user = await User.findOne({
     passwordResetToken: hashedToken,
     passwordResetExpires: { $gt: Date.now() },
   });
-  if (!user) throw new Error(" Token Expired, Please try again later");
-  req.activityActor = user;
-  user.password = password;
-  user.passwordResetToken = undefined;
-  user.passwordResetExpires = undefined;
-  await user.save();
-  // res.json(user);
-  res.send(
-    `
-    <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Password Changed</title>
-  <style>
-    body {
-      font-family: 'Arial', sans-serif;
-      background-color: #f4f4f4;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-    }
 
-    .container {
-      text-align: center;
-      background-color: #fff;
-      padding: 30px;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    }
+  if (!user) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "Reset token is invalid or has expired. Please request a new link.",
+    });
+  }
 
-    h1 {
-      color: #333;
-    }
+  // 4. Hash password using the same bcrypt configuration
+  const hashedPassword = await bcrypt.hash(password, 10);
 
-    p {
-      color: #555;
-      margin-bottom: 20px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Password Changed Successfully</h1>
-    <p>Your password has been changed successfully. You can now log in with your new password.</p>
-  </div>
-</body>
-</html>
-    `,
+  // 5. Update only password and reset-token fields
+  const result = await User.updateOne(
+    {
+      _id: user._id,
+      passwordResetToken: hashedToken,
+      passwordResetExpires: { $gt: Date.now() },
+    },
+    {
+      $set: {
+        password: hashedPassword,
+        passwordChangedAt: new Date(Date.now() - 1000),
+      },
+      $unset: {
+        passwordResetToken: "",
+        passwordResetExpires: "",
+      },
+    },
+    {
+      runValidators: false,
+    },
   );
+
+  if (result.modifiedCount !== 1) {
+    return res.status(400).json({
+      success: false,
+      message: "Unable to reset password. Please request a new reset link.",
+    });
+  }
+
+  // 6. Send success response
+  return res.status(200).json({
+    success: true,
+    message:
+      "Password reset successfully. You can now log in with your new password.",
+  });
 });
 
 const getWishlist = asyncHandler(async (req, res) => {
